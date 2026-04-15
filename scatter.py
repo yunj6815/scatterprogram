@@ -1,130 +1,118 @@
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import platform
-
-
-# 1. 한글 폰트 설정
-def set_korean_font():
-    system_name = platform.system()
-    if system_name == 'Darwin':
-        plt.rc('font', family='AppleGothic')
-    elif system_name == 'Windows':
-        plt.rc('font', family='Malgun Gothic')
-    else:
-        plt.rc('font', family='NanumGothic')
-    plt.rcParams['axes.unicode_minus'] = False
-
-
-# 2. 데이터 로드
-@st.cache_data
-def load_data(file):
-    return pd.read_csv(file)
-
-
-# 3. 통합 시각화 함수 (데이터 타입에 따라 그래프 종류 자동 변경)
-def draw_smart_plot(df, x_col, y_col, color_col, show_trendline):
-    fig, ax = plt.subplots(figsize=(6, 5))
-    hue_val = color_col if color_col != "선택 안함" else None
-
-    is_x_numeric = pd.api.types.is_numeric_dtype(df[x_col])
-    is_y_numeric = pd.api.types.is_numeric_dtype(df[y_col])
-
-    # Case 1: 둘 다 숫자형일 때 (표준 산점도)
-    if is_x_numeric and is_y_numeric:
-        sns.scatterplot(data=df, x=x_col, y=y_col, hue=hue_val, ax=ax)
-        if show_trendline:
-            sns.regplot(data=df, x=x_col, y=y_col, scatter=False, color='red', ax=ax)
-
-    # Case 2: X가 문자형, Y가 숫자형일 때 (범주형 분석)
-    elif not is_x_numeric and is_y_numeric:
-        # 데이터가 겹치지 않게 옆으로 퍼뜨려 주는 stripplot 사용
-        sns.stripplot(data=df, x=x_col, y=y_col, hue=hue_val, jitter=True, alpha=0.7, ax=ax)
-        # 박스플롯을 연하게 깔아주면 분포 확인에 용이함
-        sns.boxplot(data=df, x=x_col, y=y_col, color='lightgray', width=0.3, ax=ax, fliersize=0)
-
-        if show_trendline:
-            st.warning("X축이 문자(범주)인 경우 추세선을 표시할 수 없습니다.")
-
-    # Case 3: 기타 (Y가 문자인 경우 등)
-    else:
-        st.error("Y축은 반드시 수치 데이터여야 시각화가 가능합니다.")
-
-    return fig
-
-
-# 4. 스마트 분석 보고서 함수
+# 4. 스마트 상세 분석 보고서 함수 (4단계 심층 분석 복원)
 def display_smart_report(df, x_col, y_col):
     is_x_numeric = pd.api.types.is_numeric_dtype(df[x_col])
     is_y_numeric = pd.api.types.is_numeric_dtype(df[y_col])
 
     if not is_y_numeric:
-        st.write("반응 변수(Y축)가 숫자 데이터가 아니어서 분석을 진행할 수 없습니다.")
+        st.write("반응 변수(Y축)가 숫자 데이터가 아니어서 통계 분석을 진행할 수 없습니다.")
         return
 
-    df_clean = df[[x_col, y_col]].dropna()
+    # 결측치 제거
+    df_clean = df[[x_col, y_col]].dropna().copy()
 
-    # --- 숫자 vs 숫자 보고서 ---
+    # ==========================================
+    # [Case 1] 숫자 vs 숫자 상세 보고서 (기존 4단계 복원)
+    # ==========================================
     if is_x_numeric:
         corr = df_clean[x_col].corr(df_clean[y_col])
-        st.markdown(f"### 1. 상관관계 분석 ({x_col} - {y_col})")
-        direction = "양의" if corr > 0 else "음의"
-        strength = "강한" if abs(corr) >= 0.7 else "어느 정도의" if abs(corr) >= 0.3 else "약한"
-        st.write(f"두 변수 간 상관계수는 {corr:.2f}로, **{strength} {direction} 상관관계**가 관찰됩니다.")
 
-        st.markdown("### 2. 특이사항 및 결론")
-        st.info(f"'{x_col}' 수치가 증가함에 따라 '{y_col}'이(가) 어떻게 변화하는지 경향성이 확인되었습니다.")
+        # --- 1. 상관관계 ---
+        st.markdown(f"### 1. 상관관계 분석 ('{x_col}' - '{y_col}')")
 
-    # --- 문자(전공 등) vs 숫자 보고서 ---
+        if corr > 0:
+            direction, trend = "양의", "증가할수록 대체로 높아지는"
+        elif corr < 0:
+            direction, trend = "음의", "증가할수록 대체로 낮아지는"
+        else:
+            direction, trend = "무상관", "뚜렷한 방향성을 찾기 어려운"
+
+        strength = "강한" if abs(corr) >= 0.7 else "어느 정도의" if abs(corr) >= 0.3 else "매우 약한"
+
+        st.write(f"- **전체 흐름:** '{x_col}' 수치가 {trend} 경향이 관찰됩니다.")
+        st.write(f"- **상관 강도:** 두 변수의 상관계수는 {corr:.2f}로, **{strength} {direction} 상관관계**를 보입니다.")
+
+        # --- 2. 데이터 분포 요약 ---
+        st.markdown("### 2. 데이터 분포 요약")
+        st.write(f"'{x_col}'의 크기를 기준으로 전체 데이터를 3개의 구간(하/중/상)으로 나누어 분포를 확인합니다.")
+        try:
+            df_clean['구간'] = pd.qcut(df_clean[x_col], q=3, labels=['하위 그룹', '중간 그룹', '상위 그룹'], duplicates='drop')
+            summary = df_clean.groupby('구간', observed=False)[y_col].agg(['min', 'max', 'mean']).round(1)
+            summary.columns = [f'{y_col} 최소값', f'{y_col} 최대값', f'{y_col} 평균값']
+            st.dataframe(summary, use_container_width=True)
+        except Exception:
+            st.write("데이터가 특정 값에 편향되어 구간별 분할 요약을 제공하기 어렵습니다.")
+
+        # --- 3. 특이사항 분석 ---
+        st.markdown("### 3. 특이사항 분석")
+        q1 = df_clean[y_col].quantile(0.25)
+        q3 = df_clean[y_col].quantile(0.75)
+        iqr = q3 - q1
+        outliers = df_clean[(df_clean[y_col] < (q1 - 1.5 * iqr)) | (df_clean[y_col] > (q3 + 1.5 * iqr))]
+        outliers_cnt = len(outliers)
+
+        st.write(f"- **이상치(Outlier) 가능성:** 전체적인 흐름에서 벗어난 통계적 예외 데이터가 **{outliers_cnt}건** 발견되었습니다.")
+
+        # --- 4. 결론 및 요약 ---
+        st.markdown("### 4. 결론 및 요약")
+        if abs(corr) >= 0.3:
+            conclusion = f"'{x_col}'(은)는 '{y_col}'에 영향을 미치는 유의미한 요인입니다. 단, {outliers_cnt}개의 예외 사례를 고려할 때 다른 외부 요인도 존재할 수 있습니다."
+        else:
+            conclusion = f"현재 데이터로는 '{x_col}'와(과) '{y_col}' 사이의 뚜렷한 관련성을 찾기 어렵습니다. 다른 변수를 탐색해 보는 것을 권장합니다."
+        st.info(conclusion)
+
+    # ==========================================
+    # [Case 2] 범주(문자) vs 숫자 상세 보고서 (새로운 4단계 적용)
+    # ==========================================
     else:
-        st.markdown(f"### 1. 그룹별 비교 분석 ({x_col}에 따른 {y_col})")
-        group_stats = df_clean.groupby(x_col)[y_col].agg(['mean', 'median', 'count']).sort_values('mean',
-                                                                                                  ascending=False)
-        st.write(f"각 {x_col} 그룹별로 '{y_col}'의 평균 점수를 산출한 결과입니다.")
-        st.dataframe(group_stats.rename(columns={'mean': '평균', 'median': '중앙값', 'count': '인원수'}),
-                     use_container_width=True)
+        # --- 1. 그룹별 비교 분석 ---
+        st.markdown(f"### 1. 그룹 간 차이 분석 ('{x_col}'에 따른 '{y_col}')")
+
+        # 그룹별 통계 계산
+        group_stats = df_clean.groupby(x_col)[y_col].agg(['mean', 'median', 'min', 'max', 'count']).round(1)
+        group_stats = group_stats.sort_values('mean', ascending=False)  # 평균 기준 내림차순 정렬
 
         top_group = group_stats.index[0]
         bottom_group = group_stats.index[-1]
+        mean_diff = group_stats['mean'].iloc[0] - group_stats['mean'].iloc[-1]
 
-        st.markdown("### 2. 분포 요약 및 결론")
-        st.write(f"- **최고 성취 그룹:** 평균적으로 '{top_group}' 그룹이 가장 높은 수치를 기록했습니다.")
-        st.write(f"- **최저 성취 그룹:** '{bottom_group}' 그룹이 상대적으로 낮은 수치를 보였습니다.")
-        st.info(f"그룹별 편차를 확인한 결과, {x_col} 종류가 {y_col} 결과에 영향을 주는 주요 요인임을 알 수 있습니다.")
+        st.write(f"- **최고 성취 그룹:** '{top_group}' 그룹이 가장 높은 평균 수치를 기록했습니다.")
+        st.write(f"- **최저 성취 그룹:** '{bottom_group}' 그룹이 상대적으로 가장 낮은 평균 수치를 보였습니다.")
+        st.write(f"- **최대 격차:** 두 그룹 간의 평균 차이는 **{mean_diff:.1f}** 입니다.")
 
+        # --- 2. 데이터 분포 요약 ---
+        st.markdown("### 2. 그룹별 상세 통계 요약")
+        st.write(f"각 '{x_col}' 소속 그룹 내에서의 점수 범위와 평균, 중앙값을 확인합니다.")
+        st.dataframe(
+            group_stats.rename(columns={'mean': '평균', 'median': '중앙값', 'min': '최소값', 'max': '최대값', 'count': '데이터 수'}),
+            use_container_width=True)
 
-# 5. 메인 함수
-def main():
-    st.set_page_config(layout="wide")
-    set_korean_font()
-    st.title("산점도 및 범주형 데이터 활용하기")
+        # --- 3. 특이사항 분석 ---
+        st.markdown("### 3. 특이사항 및 그룹 내 편차 분석")
 
-    uploaded_file = st.file_uploader("CSV 파일 업로드", type="csv")
+        # 각 그룹별 이상치 계산
+        total_outliers = 0
+        outlier_text = []
+        for group, data in df_clean.groupby(x_col):
+            q1 = data[y_col].quantile(0.25)
+            q3 = data[y_col].quantile(0.75)
+            iqr = q3 - q1
+            outliers = data[(data[y_col] < (q1 - 1.5 * iqr)) | (data[y_col] > (q3 + 1.5 * iqr))]
+            if len(outliers) > 0:k
+                total_outliers += len(outliers)
+                outlier_text.append(f"'{group}' 그룹에서 {len(outliers)}건")
 
-    if uploaded_file is not None:
-        df = load_data(uploaded_file)
-        columns = df.columns.tolist()
+        if total_outliers > 0:
+            st.write(
+                f"- **이상치(Outlier):** 각 그룹의 평균적인 분포에서 크게 벗어난 예외 데이터가 총 **{total_outliers}건** 발견되었습니다. ({', '.join(outlier_text)})")
+            st.write("- **해석:** 동일한 그룹(조건) 내에서도 점수 편차가 매우 큰 샘플이 존재함을 의미합니다. 이는 해당 그룹 내에 성적을 가르는 또 다른 중요 변수가 있음을 시사합니다.")
+        else:
+            st.write("- **이상치(Outlier):** 각 그룹 내에서 통계적으로 크게 벗어난 극단적인 데이터는 발견되지 않았습니다. 대부분이 그룹 평균 주변에 고르게 분포하고 있습니다.")
 
-        col1, col2 = st.columns([1, 1])
+        # --- 4. 결론 및 요약 ---
+        st.markdown("### 4. 결론 및 요약")
+        if mean_diff > (df_clean[y_col].max() - df_clean[y_col].min()) * 0.1:  # 대략적인 유의미한 차이 기준
+            conclusion = f"분석 결과, **'{x_col}'의 종류에 따라 '{y_col}' 결과에 유의미한 차이**가 발생하고 있습니다. 이는 '{x_col}'이(가) 결과에 영향을 주는 주요 변수임을 나타냅니다."
+        else:
+            conclusion = f"분석 결과, **'{x_col}' 그룹 간 '{y_col}' 수치의 차이가 미미**합니다. 해당 변수는 결과에 큰 영향을 주지 않는 것으로 보입니다."
 
-        with col1:
-            st.write("**분석 대상 컬럼 선택**")
-            x_col = st.selectbox("x축 (설명 변수/전공 등)", columns)
-            y_col = st.selectbox("y축 (반응 변수/점수 등)", columns)
-            color_options = ["선택 안함"] + columns
-            color_col = st.selectbox("색상 구분 범주(선택)", color_options)
-            show_trendline = st.checkbox("추세선(회귀선) 표시 (숫자형 데이터 전용)")
-
-        with col2:
-            st.subheader(f"'{x_col}'와(과) '{y_col}'의 데이터 분포")
-            fig = draw_smart_plot(df, x_col, y_col, color_col, show_trendline)
-            st.pyplot(fig, use_container_width=True)
-
-        st.divider()
-        st.subheader("데이터 분석 보고서")
-        display_smart_report(df, x_col, y_col)
-
-
-if __name__ == "__main__":
-    main()
+        st.info(conclusion)
