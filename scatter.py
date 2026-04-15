@@ -3,19 +3,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import platform
+import koreanize_matplotlib
 
-
-# 1. 한글 폰트 설정
-def set_korean_font():
-    system_name = platform.system()
-    if system_name == 'Darwin':
-        plt.rc('font', family='AppleGothic')
-    elif system_name == 'Windows':
-        plt.rc('font', family='Malgun Gothic')
-    else:
-        plt.rc('font', family='NanumGothic')
-    plt.rcParams['axes.unicode_minus'] = False
-
+# 1.데이터 로드
+@st.cache_data
+def load_data(file):
+    return pd.read_csv(file)
 
 # 2. 데이터 로드
 @st.cache_data
@@ -150,8 +143,7 @@ def display_smart_report(df, x_col, y_col):
 # 5. 메인 함수
 def main():
     st.set_page_config(layout="wide")
-    set_korean_font()
-    st.title("데이터 시각화 및 심층 분석 도구")
+    set_korean_font()    st.title("데이터 시각화 및 심층 분석 도구")
 
     uploaded_file = st.file_uploader("CSV 파일 업로드", type="csv")
 
