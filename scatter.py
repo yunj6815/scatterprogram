@@ -143,7 +143,7 @@ def display_smart_report(df, x_col, y_col):
 # 5. 메인 함수
 def main():
     st.set_page_config(layout="wide")
-    set_korean_font()    st.title("데이터 시각화 및 심층 분석 도구")
+    st.title("데이터 시각화 및 심층 분석 도구")
 
     uploaded_file = st.file_uploader("CSV 파일 업로드", type="csv")
 
